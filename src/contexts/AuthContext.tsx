@@ -2,7 +2,6 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { ensureUserProfile } from '../lib/api/profile';
-import { toast } from 'react-hot-toast';
 
 interface AuthContextType {
   user: User | null;
@@ -30,27 +29,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
-      setSession(initialSession);
-      setUser(initialSession?.user ?? null);
+    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       if (initialSession?.user) {
-        ensureUserProfile(initialSession.user.id).catch(console.error);
+        setSession(initialSession);
+        setUser(initialSession.user);
+        try {
+          await ensureUserProfile(initialSession.user.id);
+        } catch (error) {
+          console.error('Failed to ensure user profile:', error);
+          // If profile creation fails, sign out the user
+          await supabase.auth.signOut();
+          setSession(null);
+          setUser(null);
+        }
       }
       setLoading(false);
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-      console.log('Auth state changed:', _event);
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
-      
       if (newSession?.user) {
+        setSession(newSession);
+        setUser(newSession.user);
         try {
           await ensureUserProfile(newSession.user.id);
         } catch (error) {
           console.error('Failed to ensure user profile:', error);
+          await supabase.auth.signOut();
+          setSession(null);
+          setUser(null);
         }
+      } else {
+        setSession(null);
+        setUser(null);
       }
     });
 
@@ -60,52 +71,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    try {
-      const { error, data } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
+    const { error, data } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
 
-      if (error) throw error;
-
-      if (data.user) {
-        await ensureUserProfile(data.user.id);
-        toast.success('Successfully signed in!');
-      }
-    } catch (error) {
-      console.error('Sign in error:', error);
-      throw error;
-    }
+    if (error) throw error;
   };
 
   const signUp = async (email: string, password: string) => {
-    try {
-      const { error, data } = await supabase.auth.signUp({
-        email,
-        password
-      });
+    const { error, data } = await supabase.auth.signUp({
+      email,
+      password
+    });
 
-      if (error) throw error;
-
-      if (data.user) {
-        await ensureUserProfile(data.user.id);
-        toast.success('Account created! Please check your email for verification.');
-      }
-    } catch (error) {
-      console.error('Sign up error:', error);
-      throw error;
-    }
+    if (error) throw error;
   };
 
   const signOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      toast.success('Successfully signed out');
-    } catch (error) {
-      console.error('Sign out error:', error);
-      throw error;
-    }
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   };
 
   return (

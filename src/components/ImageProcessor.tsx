@@ -1,32 +1,45 @@
 import React from 'react';
 import { X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import FileUpload from './FileUpload';
+import ProcessingStatus from './ProcessingStatus';
+import { useAuth } from '../contexts/AuthContext';
+import { useImageProcessing } from '../hooks/useImageProcessing';
+import { ServiceId } from '../config/serviceCosts';
 import { toast } from 'react-hot-toast';
 
 interface ImageProcessorProps {
   selectedFile: File | null;
   previewUrl: string | null;
   processedImageUrl: string | null;
-  isProcessing: boolean;
+  serviceId: ServiceId;
   onFileSelect: (file: File) => void;
   onRemoveFile: () => void;
-  onProcess: () => Promise<void>;
 }
 
 export default function ImageProcessor({
   selectedFile,
   previewUrl,
   processedImageUrl,
-  isProcessing,
+  serviceId,
   onFileSelect,
   onRemoveFile,
-  onProcess
 }: ImageProcessorProps) {
+  const { user } = useAuth();
+  const { processImage, processingState } = useImageProcessing(serviceId);
+  const navigate = useNavigate();
+
   const handleProcess = async () => {
-    try {
-      await onProcess();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to process image');
+    if (!user) {
+      toast.error('Please log in to continue');
+      return;
+    }
+
+    if (!selectedFile) return;
+
+    const outputUrl = await processImage(selectedFile);
+    if (outputUrl) {
+      toast.success('Image processed successfully!');
     }
   };
 
@@ -56,16 +69,21 @@ export default function ImageProcessor({
         </div>
       )}
 
+      <ProcessingStatus 
+        status={processingState.status} 
+        message={processingState.message} 
+      />
+
       <button 
         onClick={handleProcess}
-        disabled={!selectedFile || isProcessing}
+        disabled={!selectedFile || processingState.status !== 'idle'}
         className={`w-full py-3 rounded-lg transition-colors ${
-          selectedFile && !isProcessing
+          selectedFile && processingState.status === 'idle'
             ? 'bg-purple-500 hover:bg-purple-600'
             : 'bg-gray-600 cursor-not-allowed'
         }`}
       >
-        {isProcessing ? 'Processing...' : 'Process Image'}
+        {processingState.status === 'idle' ? 'Process Image' : 'Processing...'}
       </button>
 
       {processedImageUrl && (

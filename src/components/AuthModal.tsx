@@ -21,12 +21,13 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     try {
       if (isLogin) {
         await signIn(email, password);
+        onClose();
         toast.success('Successfully signed in!');
       } else {
         await signUp(email, password);
+        onClose();
         toast.success('Account created! Please check your email for verification.');
       }
-      onClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'An error occurred');
     }
