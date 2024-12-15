@@ -1,24 +1,24 @@
 import { createServerApi } from './server';
+import { handleApiError } from '../../utils/api/errors';
 
 const api = createServerApi();
 
 export async function processWithReplicate(imageUrl: string): Promise<string> {
   try {
-    const response = await api.post('/replicate', {
-      imageUrl
-    });
+    const response = await api.post('/replicate', { imageUrl });
+    const data = await response.json();
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Processing failed');
+      throw new Error(data.error || `Processing failed: ${response.statusText}`);
     }
 
-    const result = await response.json();
-    return result.outputUrl;
+    if (!data.outputUrl) {
+      throw new Error('No output URL received from processing');
+    }
+
+    return data.outputUrl;
   } catch (error) {
     console.error('Replicate processing failed:', error);
-    throw error instanceof Error 
-      ? error 
-      : new Error('Failed to process image');
+    throw handleApiError(error);
   }
 }
