@@ -5,7 +5,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useProfile } from '../hooks/useProfile';
 import AuthModal from './AuthModal';
 import TokenDisplay from './TokenDisplay';
-import { toast } from 'react-hot-toast';
 
 export default function Header() {
   const [isAuthModalOpen, setIsAuthModalOpen] = React.useState(false);
@@ -13,14 +12,13 @@ export default function Header() {
   const { profile } = useProfile(user?.id);
   const navigate = useNavigate();
 
-  const handleSignOut = async () => {
+  const handleSignOut = async (e: React.MouseEvent) => {
+    e.preventDefault();
     try {
       await signOut();
-      navigate('/');
-      toast.success('Signed out successfully');
+      navigate('/', { replace: true });
     } catch (error) {
-      toast.error('Failed to sign out');
-      console.error('Error signing out:', error);
+      console.error('Error in handleSignOut:', error);
     }
   };
 
@@ -36,7 +34,7 @@ export default function Header() {
           </Link>
           
           <nav className="flex items-center gap-6">
-            {user && (
+            {user ? (
               <>
                 <Link 
                   to="/pricing" 
@@ -57,9 +55,7 @@ export default function Header() {
                   Sign Out
                 </button>
               </>
-            )}
-            
-            {!user && (
+            ) : (
               <button
                 onClick={() => setIsAuthModalOpen(true)}
                 className="px-4 py-2 rounded-lg bg-purple-500 text-white hover:bg-purple-600 transition-colors"

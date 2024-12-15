@@ -17,7 +17,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     return data;
   } catch (error) {
     console.error('getUserProfile error:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -41,20 +41,29 @@ export async function updateUserProfile(
     return data;
   } catch (error) {
     console.error('updateUserProfile error:', error);
-    return null;
+    throw error;
   }
 }
 
 export async function ensureUserProfile(userId: string): Promise<UserProfile | null> {
   try {
     // First check if profile exists
-    const existingProfile = await getUserProfile(userId);
+    const { data: existingProfile, error: fetchError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+      throw fetchError;
+    }
+
     if (existingProfile) {
       return existingProfile;
     }
 
     // Create new profile if none exists
-    const { data, error } = await supabase
+    const { data: newProfile, error: insertError } = await supabase
       .from('user_profiles')
       .insert([
         {
@@ -66,14 +75,13 @@ export async function ensureUserProfile(userId: string): Promise<UserProfile | n
       .select()
       .single();
 
-    if (error) {
-      console.error('Error creating user profile:', error);
-      throw error;
+    if (insertError) {
+      throw insertError;
     }
 
-    return data;
+    return newProfile;
   } catch (error) {
     console.error('ensureUserProfile error:', error);
-    return null;
+    throw error;
   }
 }

@@ -1,7 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
 import { ensureUserProfile } from '../lib/api/profile';
+import { signOutUser } from '../lib/auth/signOut';
+import { getInitialSession, subscribeToAuthChanges } from '../lib/auth/session';
+import { supabase } from '../lib/supabase';
+import { toast } from 'react-hot-toast';
 
 interface AuthContextType {
   user: User | null;
@@ -28,69 +31,94 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
-      if (initialSession?.user) {
-        setSession(initialSession);
-        setUser(initialSession.user);
-        try {
-          await ensureUserProfile(initialSession.user.id);
-        } catch (error) {
-          console.error('Failed to ensure user profile:', error);
-          // If profile creation fails, sign out the user
-          await supabase.auth.signOut();
-          setSession(null);
+    let mounted = true;
+
+    const initializeAuth = async () => {
+      try {
+        const initialSession = await getInitialSession();
+        
+        if (mounted) {
+          if (initialSession?.user) {
+            setSession(initialSession);
+            setUser(initialSession.user);
+            await ensureUserProfile(initialSession.user.id);
+          }
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Auth initialization error:', error);
+        if (mounted) {
+          setLoading(false);
           setUser(null);
+          setSession(null);
         }
       }
-      setLoading(false);
-    });
+    };
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-      if (newSession?.user) {
+    initializeAuth();
+
+    const { data: { subscription } } = subscribeToAuthChanges(async (newSession) => {
+      if (mounted) {
         setSession(newSession);
-        setUser(newSession.user);
-        try {
-          await ensureUserProfile(newSession.user.id);
-        } catch (error) {
-          console.error('Failed to ensure user profile:', error);
-          await supabase.auth.signOut();
-          setSession(null);
-          setUser(null);
+        setUser(newSession?.user ?? null);
+        
+        if (newSession?.user) {
+          try {
+            await ensureUserProfile(newSession.user.id);
+          } catch (error) {
+            console.error('Failed to ensure user profile:', error);
+            // If profile creation fails, sign out the user
+            await signOutUser();
+            setUser(null);
+            setSession(null);
+          }
         }
-      } else {
-        setSession(null);
-        setUser(null);
       }
     });
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error, data } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-
-    if (error) throw error;
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      if (error) throw error;
+    } catch (error) {
+      console.error('Sign in error:', error);
+      throw error;
+    }
   };
 
   const signUp = async (email: string, password: string) => {
-    const { error, data } = await supabase.auth.signUp({
-      email,
-      password
-    });
-
-    if (error) throw error;
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password
+      });
+      if (error) throw error;
+    } catch (error) {
+      console.error('Sign up error:', error);
+      throw error;
+    }
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    try {
+      await signOutUser();
+      setUser(null);
+      setSession(null);
+      toast.success('Signed out successfully');
+    } catch (error) {
+      console.error('Sign out error:', error);
+      toast.error('Failed to sign out');
+      throw error;
+    }
   };
 
   return (

@@ -4,28 +4,46 @@ import { getUserProfile } from '../lib/api/profile';
 
 export function useProfile(userId: string | undefined) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+
     async function loadProfile() {
       if (!userId) {
-        setProfile(null);
-        setLoading(false);
+        if (mounted) {
+          setProfile(null);
+          setLoading(false);
+        }
         return;
       }
 
       try {
+        setLoading(true);
         const data = await getUserProfile(userId);
-        setProfile(data);
+        if (mounted) {
+          setProfile(data);
+          setError(null);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err : new Error('Failed to load profile'));
+        console.error('Profile loading error:', err);
+        if (mounted) {
+          setError(err instanceof Error ? err : new Error('Failed to load profile'));
+          setProfile(null);
+        }
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     }
 
     loadProfile();
+
+    return () => {
+      mounted = false;
+    };
   }, [userId]);
 
   return { profile, loading, error, setProfile };
