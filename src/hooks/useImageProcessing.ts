@@ -10,13 +10,18 @@ import { serviceCosts } from '../config/serviceCosts';
 import { processWithReplicate } from '../lib/api/replicate';
 import { ServiceId } from '../config/serviceCosts';
 
+interface ProcessingOptions {
+  scale?: number;
+  face_enhance?: boolean;
+}
+
 export function useImageProcessing(serviceId: ServiceId) {
   const { user } = useAuth();
   const { profile } = useProfile(user?.id);
   const { processingState, setProcessingState } = useProcessingState();
   const { checkCredits } = useCreditCheck(serviceId);
 
-  const processImage = async (file: File): Promise<string | null> => {
+  const processImage = async (file: File, options: ProcessingOptions = {}): Promise<string | null> => {
     if (!checkCredits(profile?.credits) || !user) return null;
 
     try {
@@ -35,7 +40,7 @@ export function useImageProcessing(serviceId: ServiceId) {
 
       // Process with Replicate
       setProcessingState({ status: 'processing', message: 'Processing image...' });
-      const outputUrl = await processWithReplicate(inputUrl);
+      const outputUrl = await processWithReplicate(inputUrl, options);
 
       // Update service usage with result
       setProcessingState({ status: 'saving', message: 'Saving result...' });

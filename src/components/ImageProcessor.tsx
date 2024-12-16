@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import FileUpload from './FileUpload';
 import ProcessingStatus from './ProcessingStatus';
+import UpscaleControls from './upscale/UpscaleControls';
 import { useAuth } from '../contexts/AuthContext';
 import { useImageProcessing } from '../hooks/useImageProcessing';
 import { ServiceId } from '../config/serviceCosts';
@@ -28,6 +29,8 @@ export default function ImageProcessor({
   const { user } = useAuth();
   const { processImage, processingState } = useImageProcessing(serviceId);
   const navigate = useNavigate();
+  const [scale, setScale] = useState(4);
+  const [enhanceFace, setEnhanceFace] = useState(false);
 
   const handleProcess = async () => {
     if (!user) {
@@ -37,9 +40,17 @@ export default function ImageProcessor({
 
     if (!selectedFile) return;
 
-    const outputUrl = await processImage(selectedFile);
-    if (outputUrl) {
-      toast.success('Image processed successfully!');
+    try {
+      const outputUrl = await processImage(selectedFile, {
+        scale,
+        face_enhance: enhanceFace
+      });
+      
+      if (outputUrl) {
+        toast.success('Image processed successfully!');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to process image');
     }
   };
 
@@ -63,8 +74,17 @@ export default function ImageProcessor({
             <img
               src={previewUrl}
               alt="Input preview"
-              className="rounded-lg max-h-[300px] object-contain"
+              className="rounded-lg max-h-[300px] object-contain mb-6"
             />
+            
+            {serviceId === 'upscale' && (
+              <UpscaleControls
+                scale={scale}
+                enhanceFace={enhanceFace}
+                onScaleChange={setScale}
+                onEnhanceFaceChange={setEnhanceFace}
+              />
+            )}
           </div>
         </div>
       )}
@@ -88,7 +108,7 @@ export default function ImageProcessor({
 
       {processedImageUrl && (
         <div className="bg-gray-700/50 rounded-xl p-6">
-          <h3 className="text-lg font-medium mb-3">Output Image</h3>
+          <h3 className="text-lg font-medium mb-3">Result</h3>
           <img
             src={processedImageUrl}
             alt="Processed result"

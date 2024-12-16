@@ -1,40 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
-
-const REPLICATE_API_ENDPOINT = 'https://api.replicate.com/v1/predictions';
-const REPLICATE_MODEL_VERSION = "f121d640bd286e1fdc67f9799164c1d5be36ff74576ee11c803ae5b665dd46aa";
-
-async function pollForResult(predictionId) {
-  const maxAttempts = 30;
-  const pollingInterval = 1000;
-  let attempts = 0;
-
-  while (attempts < maxAttempts) {
-    const response = await fetch(`${REPLICATE_API_ENDPOINT}/${predictionId}`, {
-      headers: {
-        'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to check prediction status');
-    }
-
-    const prediction = await response.json();
-
-    if (prediction.status === 'succeeded') {
-      return prediction.output[0];
-    }
-
-    if (prediction.status === 'failed') {
-      throw new Error(prediction.error || 'Processing failed');
-    }
-
-    await new Promise(resolve => setTimeout(resolve, pollingInterval));
-    attempts++;
-  }
-
-  throw new Error('Timeout waiting for processing result');
-}
+import { processImage } from './services/replicate.service.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -42,32 +6,20 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { imageUrl } = req.body;
+    const { imageUrl, scale, face_enhance } = req.body;
+    console.debug('Processing request:', { imageUrl, scale, face_enhance });
 
-    // Start the processing
-    const startResponse = await fetch(REPLICATE_API_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        version: REPLICATE_MODEL_VERSION,
-        input: {
-          image: imageUrl,
-          scale: 2
-        }
-      })
-    });
-
-    if (!startResponse.ok) {
-      throw new Error('Failed to start processing');
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'Image URL is required' });
     }
 
-    const prediction = await startResponse.json();
-    const outputUrl = await pollForResult(prediction.id);
+    if (!process.env.REPLICATE_API_TOKEN) {
+      console.error('Missing REPLICATE_API_TOKEN');
+      return res.status(500).json({ error: 'Server configuration error' });
+    }
 
-    return res.status(200).json({ outputUrl });
+    const result = await processImage(imageUrl, { scale, face_enhance });
+    return res.status(200).json(result);
   } catch (error) {
     console.error('Processing failed:', error);
     return res.status(500).json({

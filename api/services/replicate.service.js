@@ -1,90 +1,72 @@
-import { getEnvVar } from '../config/environment.js';
-import { ApiError } from '../utils/error.js';
-import { validateImageUrl } from '../utils/validation.js';
-
-const REPLICATE_API_ENDPOINT = 'https://api.replicate.com/v1/predictions';
-const MODEL_VERSION = "nightmareai/real-esrgan:f121d640bd286e1fdc67f9799164c1d5be36ff74576ee11c803ae5b665dd46aa";
-const MAX_ATTEMPTS = 30;
-const POLLING_INTERVAL = 2000;
+import { REPLICATE_API_ENDPOINT, REPLICATE_MODEL_VERSION } from '../config/constants.js';
 
 async function pollForResult(predictionId) {
+  const maxAttempts = 30;
+  const pollingInterval = 1000;
   let attempts = 0;
 
-  while (attempts < MAX_ATTEMPTS) {
+  while (attempts < maxAttempts) {
     const response = await fetch(`${REPLICATE_API_ENDPOINT}/${predictionId}`, {
       headers: {
-        'Authorization': `Token ${getEnvVar('REPLICATE_API_TOKEN')}`,
-        'Content-Type': 'application/json',
+        'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
       },
     });
 
     if (!response.ok) {
-      throw new ApiError('Failed to check prediction status', response.status);
+      throw new Error(`Failed to check prediction status: ${response.status}`);
     }
 
     const prediction = await response.json();
-    console.log('Prediction status:', prediction.status);
+    console.debug('Prediction status:', prediction);
 
     if (prediction.status === 'succeeded') {
-      // Handle both single URL and array outputs
-      const output = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
-      return output;
+      return prediction.output;
     }
 
     if (prediction.status === 'failed') {
-      throw new ApiError(prediction.error || 'Image processing failed', 500);
+      throw new Error(prediction.error || 'Processing failed');
     }
 
-    await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL));
+    await new Promise(resolve => setTimeout(resolve, pollingInterval));
     attempts++;
   }
 
-  throw new ApiError('Processing timed out', 504);
+  throw new Error('Timeout waiting for processing result');
 }
 
-export async function processImage(imageUrl) {
-  try {
-    validateImageUrl(imageUrl);
+export async function processImage(imageUrl, options = {}) {
+  console.debug('Processing image:', { imageUrl, options });
 
-    // Start the prediction
-    const response = await fetch(REPLICATE_API_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Token ${getEnvVar('REPLICATE_API_TOKEN')}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        version: MODEL_VERSION,
-        input: {
-          image: imageUrl,
-          scale: 2
-        }
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new ApiError(error.detail || 'Failed to start processing', response.status);
+  const payload = {
+    version: REPLICATE_MODEL_VERSION,
+    input: {
+      image: imageUrl,
+      scale: options.scale || 2,
+      face_enhance: options.face_enhance || false
     }
+  };
 
-    const prediction = await response.json();
-    console.log('Started prediction:', prediction.id);
+  console.debug('Replicate payload:', payload);
 
-    // Poll for the result
-    const outputUrl = await pollForResult(prediction.id);
-    console.log('Processing complete:', outputUrl);
+  const response = await fetch(REPLICATE_API_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload)
+  });
 
-    return outputUrl;
-  } catch (error) {
-    console.error('Replicate API error:', error);
-    
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    
-    throw new ApiError(
-      error.message || 'Failed to process image with Replicate API',
-      error.response?.status || 500
-    );
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || `Failed to start prediction: ${response.status}`);
   }
+
+  const prediction = await response.json();
+  console.debug('Started prediction:', prediction);
+
+  const output = await pollForResult(prediction.id);
+  const outputUrl = Array.isArray(output) ? output[0] : output;
+
+  return { outputUrl };
 }

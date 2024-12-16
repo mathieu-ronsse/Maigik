@@ -1,8 +1,10 @@
 import express from 'express';
 import cors from 'cors';
+import 'dotenv/config'; // Mathieu
 import { validateEnvironment } from './config/environment.js';
 import replicateRoutes from './routes/replicate.routes.js';
 import { errorHandler } from './middleware/error.handler.js';
+
 
 // Validate environment variables before starting the server
 validateEnvironment();
