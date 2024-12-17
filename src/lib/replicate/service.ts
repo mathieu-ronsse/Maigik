@@ -1,43 +1,44 @@
-import { replicate } from './client';
-import { MODELS } from './models';
-import { ProcessOptions, ProcessResult } from './types';
+import Replicate from 'replicate';
 import { logger } from '../utils/logger';
+import { MODELS } from './models';
+import { ProcessResult } from './types/prediction';
 import { validateImageUrl, validateNumber } from '../utils/validation';
-import { handleError } from '../utils/errors';
 
 export async function processImage(
   imageUrl: string, 
-  options: ProcessOptions = {}
+  options: { scale?: number; face_enhance?: boolean } = {}
 ): Promise<ProcessResult> {
   try {
     // Validate inputs
-    const validatedUrl = validateImageUrl(imageUrl);
+    validateImageUrl(imageUrl);
     const scale = validateNumber(options.scale || MODELS.ESRGAN.defaultOptions.scale, {
       min: 1,
       max: 10,
       fieldName: 'Scale'
     });
 
-    logger.debug('Processing image with options:', { imageUrl: validatedUrl, options });
+    logger.debug('Processing image with options:', { imageUrl, options });
 
-    const prediction = await replicate.run(
+    const replicate = new Replicate({
+      auth: import.meta.env.VITE_REPLICATE_API_TOKEN,
+    });
+
+    const output = await replicate.run(
       MODELS.ESRGAN.version,
       {
         input: {
-          image: validatedUrl,
+          image: imageUrl,
           scale,
-          face_enhance: options.face_enhance || MODELS.ESRGAN.defaultOptions.face_enhance
+          face_enhance: options.face_enhance || false
         }
       }
     );
 
-    logger.debug('Prediction result:', prediction);
-
-    // Replicate returns an array with one URL for this model
-    const outputUrl = Array.isArray(prediction) ? prediction[0] : prediction;
+    // The output is either a string or an array of strings, get the first URL
+    const outputUrl = Array.isArray(output) ? output[0] : output;
 
     if (!outputUrl) {
-      throw new Error('No output URL received from Replicate');
+      throw new Error('No output URL received from processing');
     }
 
     return {
@@ -46,10 +47,9 @@ export async function processImage(
     };
   } catch (error) {
     logger.error('Failed to process image:', error);
-    const handledError = handleError(error);
     return {
       success: false,
-      error: handledError.message
+      error: error instanceof Error ? error.message : 'Failed to process image'
     };
   }
 }
