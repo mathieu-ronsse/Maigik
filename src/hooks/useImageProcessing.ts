@@ -7,8 +7,9 @@ import { useCreditCheck } from './useCreditCheck';
 import { uploadImageToStorage } from '../lib/api/storage';
 import { logServiceUsage, updateServiceUsage } from '../lib/api/service-usage';
 import { serviceCosts } from '../config/serviceCosts';
-import { processWithReplicate } from '../lib/api/replicate';
+import { processImage } from '../lib/replicate/service';
 import { ServiceId } from '../config/serviceCosts';
+import { logger } from '../utils/logger';
 
 interface ProcessingOptions {
   scale?: number;
@@ -21,7 +22,7 @@ export function useImageProcessing(serviceId: ServiceId) {
   const { processingState, setProcessingState } = useProcessingState();
   const { checkCredits } = useCreditCheck(serviceId);
 
-  const processImage = async (file: File, options: ProcessingOptions = {}): Promise<string | null> => {
+  const processUserImage = async (file: File, options: ProcessingOptions = {}): Promise<string | null> => {
     if (!checkCredits(profile?.credits) || !user) return null;
 
     try {
@@ -40,18 +41,23 @@ export function useImageProcessing(serviceId: ServiceId) {
 
       // Process with Replicate
       setProcessingState({ status: 'processing', message: 'Processing image...' });
-      const outputUrl = await processWithReplicate(inputUrl, options);
+      const result = await processImage(inputUrl, options);
+
+      if (!result.success || !result.outputUrl) {
+        throw new Error(result.error || 'Processing failed');
+      }
 
       // Update service usage with result
       setProcessingState({ status: 'saving', message: 'Saving result...' });
       await updateServiceUsage(usage.id!, {
         output_image_timestamp: new Date().toISOString(),
-        output_image_url: outputUrl
+        output_image_url: result.outputUrl
       });
 
       setProcessingState({ status: 'complete', message: 'Processing complete!' });
-      return outputUrl;
+      return result.outputUrl;
     } catch (error) {
+      logger.error('Image processing failed:', error);
       setProcessingState({ 
         status: 'error', 
         message: error instanceof Error ? error.message : 'An error occurred' 
@@ -61,7 +67,7 @@ export function useImageProcessing(serviceId: ServiceId) {
   };
 
   return {
-    processImage,
+    processImage: processUserImage,
     processingState
   };
 }
