@@ -1,72 +1,52 @@
-import { REPLICATE_API_ENDPOINT, REPLICATE_MODEL_VERSION } from '../config/constants.js';
-
-async function pollForResult(predictionId) {
-  const maxAttempts = 30;
-  const pollingInterval = 1000;
-  let attempts = 0;
-
-  while (attempts < maxAttempts) {
-    const response = await fetch(`${REPLICATE_API_ENDPOINT}/${predictionId}`, {
-      headers: {
-        'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to check prediction status: ${response.status}`);
-    }
-
-    const prediction = await response.json();
-    console.debug('Prediction status:', prediction);
-
-    if (prediction.status === 'succeeded') {
-      return prediction.output;
-    }
-
-    if (prediction.status === 'failed') {
-      throw new Error(prediction.error || 'Processing failed');
-    }
-
-    await new Promise(resolve => setTimeout(resolve, pollingInterval));
-    attempts++;
-  }
-
-  throw new Error('Timeout waiting for processing result');
-}
+import Replicate from 'replicate';
+import { REPLICATE_MODEL_VERSION } from '../config/constants.js';
+import { logger } from '../utils/logger.js';
 
 export async function processImage(imageUrl, options = {}) {
-  console.debug('Processing image:', { imageUrl, options });
+  logger.debug('Processing image with options:', { imageUrl, options });
 
-  const payload = {
-    version: REPLICATE_MODEL_VERSION,
-    input: {
-      image: imageUrl,
-      scale: options.scale || 2,
-      face_enhance: options.face_enhance || false
+  try {
+    if (!process.env.REPLICATE_API_TOKEN) {
+      throw new Error('REPLICATE_API_TOKEN is not set');
     }
-  };
 
-  console.debug('Replicate payload:', payload);
+    const replicate = new Replicate({
+      auth: process.env.REPLICATE_API_TOKEN,
+    });
 
-  const response = await fetch(REPLICATE_API_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload)
-  });
+    logger.debug('Initializing Replicate prediction...');
+    
+    const output = await replicate.run(
+      REPLICATE_MODEL_VERSION,
+      {
+        input: {
+          image: imageUrl,
+          scale: options.scale || 2,
+          face_enhance: options.face_enhance || false
+        }
+      }
+    );
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || `Failed to start prediction: ${response.status}`);
+    logger.debug('Replicate processing completed:', output);
+
+    // Handle both array and string outputs
+    const outputUrl = Array.isArray(output) ? output[0] : output;
+
+    if (!outputUrl) {
+      throw new Error('No output URL received from Replicate');
+    }
+
+    return { outputUrl };
+  } catch (error) {
+    logger.error('Replicate processing failed:', error);
+    
+    // Enhance error message for common issues
+    if (error.message.includes('401')) {
+      throw new Error('Invalid Replicate API token. Please check your environment variables.');
+    } else if (error.message.includes('429')) {
+      throw new Error('Rate limit exceeded. Please try again later.');
+    }
+    
+    throw error;
   }
-
-  const prediction = await response.json();
-  console.debug('Started prediction:', prediction);
-
-  const output = await pollForResult(prediction.id);
-  const outputUrl = Array.isArray(output) ? output[0] : output;
-
-  return { outputUrl };
 }

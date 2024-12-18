@@ -1,12 +1,12 @@
 import express from 'express';
 import { processImage } from '../services/replicate.service.js';
-import { handleApiError } from '../utils/error.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
 router.post('/', async (req, res) => {
   try {
-    const { imageUrl } = req.body;
+    const { imageUrl, scale, face_enhance } = req.body;
     
     if (!imageUrl) {
       return res.status(400).json({ 
@@ -14,13 +14,14 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const outputUrl = await processImage(imageUrl);
-    res.json({ outputUrl });
+    logger.debug('Processing request:', { imageUrl, scale, face_enhance });
+
+    const result = await processImage(imageUrl, { scale, face_enhance });
+    res.json(result);
   } catch (error) {
-    const apiError = handleApiError(error);
-    console.error('Processing error:', error);
-    res.status(apiError.statusCode).json({ 
-      error: apiError.message 
+    logger.error('Processing error:', error);
+    res.status(500).json({ 
+      error: error.message || 'Failed to process image'
     });
   }
 });

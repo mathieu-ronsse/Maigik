@@ -1,56 +1,42 @@
 import { createServerApi } from './server';
-import { handleApiError } from '../../utils/api/errors';
-import { logger } from '../../utils/logger';
+import { logger } from '../utils/logger';
+import { ProcessResult } from '../replicate/types/prediction';
 
 const api = createServerApi();
 
-export interface ProcessOptions {
-  scale: number;
-  face_enhance: boolean;
-}
-
-export interface ReplicateResponse {
-  outputUrl: string;
-}
-
-export async function processWithReplicate(imageUrl: string, options: ProcessOptions): Promise<string> {
-  const payload = { imageUrl, ...options };
-  logger.debug('Replicate request:', payload);
-
+export async function processImage(
+  imageUrl: string,
+  options: { scale?: number; face_enhance?: boolean } = {}
+): Promise<ProcessResult> {
   try {
-    //console.log("Replicate model and version:", model, version);
+    logger.debug('Sending processing request:', { imageUrl, options });
 
-    const response = await api.post('/replicate', payload);
-    
+    const response = await api.post('/replicate', {
+      imageUrl,
+      ...options
+    });
+
+    const result = await response.json();
+
     if (!response.ok) {
-      const errorText = await response.text();
-      logger.error('Replicate API error:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorText
-      });
-
-      let errorMessage: string;
-      try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData.error || `Processing failed: ${response.status}`;
-      } catch {
-        errorMessage = `Processing failed: ${response.status}`;
-      }
-      
-      throw new Error(errorMessage);
+      throw new Error(result.error || `Processing failed: ${response.status}`);
     }
 
-    const data = await response.json();
-    logger.debug('Replicate response:', data);
+    logger.debug('Processing result:', result);
 
-    if (!data.outputUrl) {
+    if (!result.outputUrl) {
       throw new Error('No output URL received from processing');
     }
 
-    return data.outputUrl;
+    return {
+      success: true,
+      outputUrl: result.outputUrl
+    };
   } catch (error) {
-    logger.error('Replicate processing failed:', error);
-    throw handleApiError(error);
+    logger.error('Failed to process image:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to process image'
+    };
   }
 }

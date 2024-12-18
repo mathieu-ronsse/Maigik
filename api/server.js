@@ -1,27 +1,32 @@
 import express from 'express';
 import cors from 'cors';
-import 'dotenv/config'; // Mathieu
+import 'dotenv/config';
 import { validateEnvironment } from './config/environment.js';
 import replicateRoutes from './routes/replicate.routes.js';
 import { errorHandler } from './middleware/error.handler.js';
+import { logger } from './utils/logger.js';
 
+try {
+  // Validate environment variables before starting the server
+  validateEnvironment();
 
-// Validate environment variables before starting the server
-validateEnvironment();
+  const app = express();
+  const port = process.env.PORT || 3000;
 
-const app = express();
-const port = process.env.PORT || 3000;
+  // Middleware
+  app.use(cors());
+  app.use(express.json());
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+  // Routes
+  app.use('/replicate', replicateRoutes);
 
-// Routes
-app.use('/replicate', replicateRoutes);
+  // Error handling
+  app.use(errorHandler);
 
-// Error handling
-app.use(errorHandler);
-
-app.listen(port, () => {
-  console.log(`API server running on port ${port}`);
-});
+  app.listen(port, () => {
+    logger.info(`API server running on port ${port}`);
+  });
+} catch (error) {
+  logger.error('Failed to start server:', error);
+  process.exit(1);
+}
