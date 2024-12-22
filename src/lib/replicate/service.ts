@@ -1,8 +1,8 @@
-import Replicate from 'replicate';
 import { logger } from '../utils/logger';
-import { MODELS } from './models';
 import { ProcessResult } from './types/prediction';
 import { validateImageUrl, validateNumber } from '../utils/validation';
+import { createPrediction, pollPrediction } from './api/predictions';
+import { MODELS } from './models';
 
 export async function processImage(
   imageUrl: string, 
@@ -19,32 +19,20 @@ export async function processImage(
 
     logger.debug('Processing image with options:', { imageUrl, options });
 
-    const replicate = new Replicate({
-      auth: import.meta.env.VITE_REPLICATE_API_TOKEN,
+    // Create prediction
+    const prediction = await createPrediction(imageUrl, {
+      scale,
+      face_enhance: options.face_enhance || false
     });
 
-    const output = await replicate.run(
-      MODELS.ESRGAN.version,
-      {
-        input: {
-          image: imageUrl,
-          scale,
-          face_enhance: options.face_enhance || false
-        }
-      }
-    );
+    // Poll for result
+    const result = await pollPrediction(prediction.id);
 
-    // The output is either a string or an array of strings, get the first URL
-    const outputUrl = Array.isArray(output) ? output[0] : output;
-
-    if (!outputUrl) {
+    if (!result.outputUrl) {
       throw new Error('No output URL received from processing');
     }
 
-    return {
-      success: true,
-      outputUrl
-    };
+    return result;
   } catch (error) {
     logger.error('Failed to process image:', error);
     return {

@@ -8,7 +8,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/replicate': {
+      '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true
       }
