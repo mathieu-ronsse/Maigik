@@ -1,5 +1,6 @@
 import { logger } from '../../utils/logger';
 import { ProcessResult } from '../types/prediction';
+import { REPLICATE_API } from './endpoints';
 
 interface PredictionResponse {
   id: string;
@@ -16,7 +17,7 @@ async function handleResponse(response: Response): Promise<any> {
 
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.detail || `HTTP error! status: ${response.status}`);
+    throw new Error(data.detail || data.error || `HTTP error! status: ${response.status}`);
   }
 
   return data;
@@ -29,14 +30,19 @@ export async function createPrediction(
   try {
     logger.debug('Creating prediction:', { imageUrl, options });
 
-    const response = await fetch("/api/predictions", {
+    const response = await fetch(`${REPLICATE_API.BASE_URL}${REPLICATE_API.PREDICTIONS}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": `Token ${import.meta.env.VITE_REPLICATE_API_TOKEN}`
       },
       body: JSON.stringify({
-        imageUrl,
-        ...options
+        version: "nightmareai/real-esrgan:f121d640bd286e1fdc67f9799164c1d5be36ff74576ee11c803ae5b665dd46aa",
+        input: {
+          image: imageUrl,
+          scale: options.scale || 2,
+          face_enhance: options.face_enhance || false
+        }
       }),
     });
 
@@ -53,9 +59,13 @@ export async function getPrediction(id: string): Promise<PredictionResponse> {
   try {
     logger.debug('Getting prediction:', { id });
 
-    const response = await fetch(`/api/predictions/${id}`);
+    const response = await fetch(`${REPLICATE_API.BASE_URL}${REPLICATE_API.PREDICTIONS}/${id}`, {
+      headers: {
+        "Authorization": `Token ${import.meta.env.VITE_REPLICATE_API_TOKEN}`
+      }
+    });
+    
     const prediction = await handleResponse(response);
-
     logger.debug('Prediction retrieved:', prediction);
     return prediction;
   } catch (error) {

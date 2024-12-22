@@ -5,7 +5,7 @@ import FileUpload from './FileUpload';
 import ProcessingStatus from './ProcessingStatus';
 import UpscaleControls from './upscale/UpscaleControls';
 import { useAuth } from '../contexts/AuthContext';
-import { useImageProcessing } from '../hooks/useImageProcessing';
+import { createPrediction, getPrediction } from '../lib/replicate/api/predictions';
 import { ServiceId } from '../config/serviceCosts';
 import { toast } from 'react-hot-toast';
 
@@ -27,10 +27,14 @@ export default function ImageProcessor({
   onRemoveFile,
 }: ImageProcessorProps) {
   const { user } = useAuth();
-  const { processImage, processingState } = useImageProcessing(serviceId);
   const navigate = useNavigate();
   const [scale, setScale] = useState(4);
   const [enhanceFace, setEnhanceFace] = useState(false);
+  const [prediction, setPrediction] = useState<any>(null);
+  const [status, setStatus] = useState<'idle' | 'uploading' | 'processing' | 'complete' | 'error'>('idle');
+  const [statusMessage, setStatusMessage] = useState('');
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   const handleProcess = async () => {
     if (!user) {
@@ -38,20 +42,54 @@ export default function ImageProcessor({
       return;
     }
 
-    if (!selectedFile) return;
+    if (!selectedFile || !previewUrl) return;
 
     try {
-      const outputUrl = await processImage(selectedFile, {
+      setStatus('uploading');
+      setStatusMessage('Starting image processing...');
+
+      // Create prediction
+      const prediction = await createPrediction(previewUrl, {
         scale,
         face_enhance: enhanceFace
       });
-      
-      if (outputUrl) {
-        toast.success('Image processed successfully!');
+
+      setPrediction(prediction);
+      setStatus('processing');
+
+      // Poll for results
+      while (
+        prediction.status !== "succeeded" &&
+        prediction.status !== "failed"
+      ) {
+        await sleep(1000);
+        const updatedPrediction = await getPrediction(prediction.id);
+        setPrediction(updatedPrediction);
+        setStatusMessage(`Processing: ${updatedPrediction.status}`);
+
+        if (updatedPrediction.status === "failed") {
+          throw new Error(updatedPrediction.error || 'Processing failed');
+        }
+      }
+
+      // Handle success
+      if (prediction.output) {
+        const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+        setStatus('complete');
+        setStatusMessage('Processing complete!');
+        onProcessComplete(outputUrl);
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to process image');
+      setStatus('error');
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to process image');
+      toast.error('Processing failed. Please try again.');
     }
+  };
+
+  const onProcessComplete = (outputUrl: string) => {
+    // Update the parent component with the processed image URL
+    const event = new CustomEvent('processComplete', { detail: { outputUrl } });
+    window.dispatchEvent(event);
   };
 
   return (
@@ -90,20 +128,20 @@ export default function ImageProcessor({
       )}
 
       <ProcessingStatus 
-        status={processingState.status} 
-        message={processingState.message} 
+        status={status}
+        message={statusMessage}
       />
 
       <button 
         onClick={handleProcess}
-        disabled={!selectedFile || processingState.status !== 'idle'}
+        disabled={!selectedFile || status === 'processing' || status === 'uploading'}
         className={`w-full py-3 rounded-lg transition-colors ${
-          selectedFile && processingState.status === 'idle'
+          selectedFile && status === 'idle'
             ? 'bg-purple-500 hover:bg-purple-600'
             : 'bg-gray-600 cursor-not-allowed'
         }`}
       >
-        {processingState.status === 'idle' ? 'Process Image' : 'Processing...'}
+        {status === 'idle' ? 'Process Image' : 'Processing...'}
       </button>
 
       {processedImageUrl && (
