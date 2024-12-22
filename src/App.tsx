@@ -7,6 +7,7 @@ import HomePage from './pages/HomePage';
 import ServicePage from './pages/ServicePage';
 import ProfilePage from './pages/ProfilePage';
 import PricingPage from './pages/PricingPage';
+import DebugPage from './pages/DebugPage';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
             <Route path="/services/:serviceId" element={<ServicePage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/debug" element={<DebugPage />} />
           </Routes>
           <Toaster position="top-right" />
         </div>

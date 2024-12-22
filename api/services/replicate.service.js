@@ -1,28 +1,17 @@
-import Replicate from 'replicate';
-import { REPLICATE_MODEL_VERSION } from '../config/constants.js';
+import { replicate, MODELS } from '../config/replicate.js';
 import { logger } from '../utils/logger.js';
 
 export async function processImage(imageUrl, options = {}) {
-  logger.debug('Processing image with options:', { imageUrl, options });
-
   try {
-    if (!process.env.REPLICATE_API_TOKEN) {
-      throw new Error('REPLICATE_API_TOKEN is not set');
-    }
+    logger.debug('Processing image with options:', { imageUrl, options });
 
-    const replicate = new Replicate({
-      auth: process.env.REPLICATE_API_TOKEN,
-    });
-
-    logger.debug('Initializing Replicate prediction...');
-    
     const output = await replicate.run(
-      REPLICATE_MODEL_VERSION,
+      MODELS.ESRGAN.version,
       {
         input: {
           image: imageUrl,
-          scale: options.scale || 2,
-          face_enhance: options.face_enhance || false
+          scale: options.scale || MODELS.ESRGAN.defaultOptions.scale,
+          face_enhance: options.face_enhance || MODELS.ESRGAN.defaultOptions.face_enhance
         }
       }
     );
@@ -36,17 +25,12 @@ export async function processImage(imageUrl, options = {}) {
       throw new Error('No output URL received from Replicate');
     }
 
-    return { outputUrl };
+    return { success: true, outputUrl };
   } catch (error) {
     logger.error('Replicate processing failed:', error);
-    
-    // Enhance error message for common issues
-    if (error.message.includes('401')) {
-      throw new Error('Invalid Replicate API token. Please check your environment variables.');
-    } else if (error.message.includes('429')) {
-      throw new Error('Rate limit exceeded. Please try again later.');
-    }
-    
-    throw error;
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to process image'
+    };
   }
 }

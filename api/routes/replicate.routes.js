@@ -1,27 +1,27 @@
 import express from 'express';
-import { processImage } from '../services/replicate.service.js';
+import Replicate from 'replicate';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
+const replicate = new Replicate({
+  auth: process.env.REPLICATE_API_TOKEN,
+});
 
 router.post('/', async (req, res) => {
   try {
-    const { imageUrl, scale, face_enhance } = req.body;
+    const { model, input } = req.body;
     
-    if (!imageUrl) {
-      return res.status(400).json({ 
-        error: 'Image URL is required' 
-      });
-    }
+    logger.debug('Processing request:', { model, input });
 
-    logger.debug('Processing request:', { imageUrl, scale, face_enhance });
+    const output = await replicate.run(model, { input });
+    
+    logger.debug('Replicate processing completed:', output);
 
-    const result = await processImage(imageUrl, { scale, face_enhance });
-    res.json(result);
+    res.json({ output });
   } catch (error) {
     logger.error('Processing error:', error);
     res.status(500).json({ 
-      error: error.message || 'Failed to process image'
+      error: error instanceof Error ? error.message : 'Failed to process image'
     });
   }
 });

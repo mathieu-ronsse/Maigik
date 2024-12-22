@@ -31,14 +31,5 @@ export function validateEnvironment() {
     throw new Error(errorMessage);
   }
 
-  // Log successful validation
   logger.debug('Environment variables validated successfully');
-}
-
-export function getEnvVar(name) {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Environment variable ${name} is not set. Check your .env file.`);
-  }
-  return value;
 }
