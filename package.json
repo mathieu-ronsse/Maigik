@@ -7,8 +7,7 @@
     "dev": "concurrently \"vite\" \"node api/server.js\"",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "start:api": "node api/server.js"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",
