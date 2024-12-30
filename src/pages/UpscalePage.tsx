@@ -45,10 +45,13 @@ export default function UpscalePage() {
       return;
     }
 
-    if (!selectedFile || !previewUrl) return;
+    if (!selectedFile || !previewUrl) {
+      toast.error('Please select an image first');
+      return;
+    }
 
     if (!profile || profile.credits < serviceCosts.upscale) {
-      toast.error('Not enough credits');
+      toast.error('Not enough credits. Please purchase more credits to continue.');
       return;
     }
 
@@ -56,9 +59,11 @@ export default function UpscalePage() {
       setStatus('uploading');
       setStatusMessage('Starting image processing...');
 
+      // Create prediction
       const prediction = await createUpscalePrediction(previewUrl, scale, enhanceFace);
+      
       if (!prediction.id) {
-        throw new Error('Invalid prediction response');
+        throw new Error('Failed to start processing');
       }
 
       setStatus('processing');
@@ -93,13 +98,14 @@ export default function UpscalePage() {
       }
 
       if (attempts >= maxAttempts) {
-        throw new Error('Processing timed out');
+        throw new Error('Processing timed out. Please try again.');
       }
     } catch (error) {
       logger.error('Processing failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to process image';
       setStatus('error');
-      setStatusMessage(error instanceof Error ? error.message : 'Failed to process image');
-      toast.error('Processing failed. Please try again.');
+      setStatusMessage(errorMessage);
+      toast.error(errorMessage);
     }
   };
 

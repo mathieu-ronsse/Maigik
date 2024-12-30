@@ -8,29 +8,37 @@ import predictionsRoutes from './routes/predictions.routes.js';
 import { errorHandler } from './middleware/error.handler.js';
 import { logger } from './utils/logger.js';
 
-try {
-  // Validate environment variables before starting the server
-  validateEnvironment();
-  validateReplicateConfig();
+const app = express();
+const port = process.env.PORT || 3000;
 
-  const app = express();
-  const port = process.env.PORT || 3000;
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
 
-  // Middleware
-  app.use(cors());
-  app.use(express.json());
+// Routes
+app.use('/api/replicate', replicateRoutes);
+app.use('/api/predictions', predictionsRoutes);
 
-  // Routes
-  app.use('/api/replicate', replicateRoutes);
-  app.use('/api/predictions', predictionsRoutes);
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
 
-  // Error handling
-  app.use(errorHandler);
+// Error handling
+app.use(errorHandler);
 
-  app.listen(port, () => {
-    logger.info(`API server running on port ${port}`);
-  });
-} catch (error) {
-  logger.error('Failed to start server:', error);
+// Start server
+app.listen(port, () => {
+  logger.info(`API server running on port ${port}`);
+});
+
+// Handle uncaught errors
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
   process.exit(1);
-}
+});
+
+process.on('unhandledRejection', (error) => {
+  logger.error('Unhandled Rejection:', error);
+  process.exit(1);
+});
