@@ -4,12 +4,12 @@ import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './contexts/AuthContext';
 import Header from './components/Header';
 import HomePage from './pages/HomePage';
-import ServicePage from './pages/ServicePage';
+import UpscalePage from './pages/UpscalePage';
 import ProfilePage from './pages/ProfilePage';
 import PricingPage from './pages/PricingPage';
 import DebugPage from './pages/DebugPage';
 
-function App() {
+export default function App() {
   return (
     <AuthProvider>
       <Router>
@@ -17,7 +17,7 @@ function App() {
           <Header />
           <Routes>
             <Route path="/" element={<HomePage />} />
-            <Route path="/services/:serviceId" element={<ServicePage />} />
+            <Route path="/services/upscale" element={<UpscalePage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/debug" element={<DebugPage />} />
@@ -28,5 +28,3 @@ function App() {
     </AuthProvider>
   );
 }
-
-export default App;
