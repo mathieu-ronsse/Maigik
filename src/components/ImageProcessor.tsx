@@ -5,9 +5,11 @@ import FileUpload from './FileUpload';
 import ProcessingStatus from './ProcessingStatus';
 import UpscaleControls from './upscale/UpscaleControls';
 import { useAuth } from '../contexts/AuthContext';
-import { createPrediction, getPrediction } from '../lib/replicate/api/predictions';
 import { ServiceId } from '../config/serviceCosts';
 import { toast } from 'react-hot-toast';
+import { logger } from '../lib/utils/logger';
+
+const MODEL = "nightmareai/real-esrgan:f121d640bd286e1fdc67f9799164c1d5be36ff74576ee11c803ae5b665dd46aa";
 
 interface ImageProcessorProps {
   selectedFile: File | null;
@@ -30,7 +32,6 @@ export default function ImageProcessor({
   const navigate = useNavigate();
   const [scale, setScale] = useState(4);
   const [enhanceFace, setEnhanceFace] = useState(false);
-  const [prediction, setPrediction] = useState<any>(null);
   const [status, setStatus] = useState<'idle' | 'uploading' | 'processing' | 'complete' | 'error'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
 
@@ -49,12 +50,27 @@ export default function ImageProcessor({
       setStatusMessage('Starting image processing...');
 
       // Create prediction
-      const prediction = await createPrediction(previewUrl, {
-        scale,
-        face_enhance: enhanceFace
+      const response = await fetch('/api/replicate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          input: {
+            image: previewUrl,
+            scale,
+            face_enhance: enhanceFace
+          }
+        }),
       });
 
-      setPrediction(prediction);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to process image');
+      }
+
+      const prediction = await response.json();
       setStatus('processing');
 
       // Poll for results
@@ -63,23 +79,30 @@ export default function ImageProcessor({
         prediction.status !== "failed"
       ) {
         await sleep(1000);
-        const updatedPrediction = await getPrediction(prediction.id);
-        setPrediction(updatedPrediction);
+        const statusResponse = await fetch(`/api/predictions/${prediction.id}`);
+        if (!statusResponse.ok) {
+          throw new Error('Failed to check prediction status');
+        }
+        const updatedPrediction = await statusResponse.json();
         setStatusMessage(`Processing: ${updatedPrediction.status}`);
 
         if (updatedPrediction.status === "failed") {
           throw new Error(updatedPrediction.error || 'Processing failed');
         }
-      }
 
-      // Handle success
-      if (prediction.output) {
-        const outputUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
-        setStatus('complete');
-        setStatusMessage('Processing complete!');
-        onProcessComplete(outputUrl);
+        if (updatedPrediction.status === "succeeded") {
+          const outputUrl = Array.isArray(updatedPrediction.output) 
+            ? updatedPrediction.output[0] 
+            : updatedPrediction.output;
+
+          setStatus('complete');
+          setStatusMessage('Processing complete!');
+          onProcessComplete(outputUrl);
+          break;
+        }
       }
     } catch (error) {
+      logger.error('Processing failed:', error);
       setStatus('error');
       setStatusMessage(error instanceof Error ? error.message : 'Failed to process image');
       toast.error('Processing failed. Please try again.');

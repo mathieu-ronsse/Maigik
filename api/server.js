@@ -4,6 +4,7 @@ import 'dotenv/config';
 import { validateEnvironment } from './config/environment.js';
 import { validateReplicateConfig } from './config/replicate.js';
 import replicateRoutes from './routes/replicate.routes.js';
+import predictionsRoutes from './routes/predictions.routes.js';
 import { errorHandler } from './middleware/error.handler.js';
 import { logger } from './utils/logger.js';
 
@@ -21,6 +22,7 @@ try {
 
   // Routes
   app.use('/api/replicate', replicateRoutes);
+  app.use('/api/predictions', predictionsRoutes);
 
   // Error handling
   app.use(errorHandler);

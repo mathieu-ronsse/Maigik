@@ -8,46 +8,7 @@ const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
 });
 
-// Validate request middleware
-const validateRequest = (req, res, next) => {
-  const { imageUrl } = req.body;
-  if (!imageUrl) {
-    return res.status(400).json({ 
-      detail: 'Image URL is required' 
-    });
-  }
-  next();
-};
-
-router.post('/', validateRequest, async (req, res) => {
-  try {
-    const { imageUrl, scale = 2, face_enhance = false } = req.body;
-
-    logger.debug('Creating prediction:', { imageUrl, scale, face_enhance });
-
-    const prediction = await replicate.predictions.create({
-      version: REPLICATE_MODEL_VERSION,
-      input: {
-        image: imageUrl,
-        scale,
-        face_enhance
-      }
-    });
-
-    if (!prediction || prediction.error) {
-      throw new Error(prediction?.error || 'Failed to create prediction');
-    }
-
-    logger.debug('Prediction created:', prediction);
-    res.status(201).json(prediction);
-  } catch (error) {
-    logger.error('Create prediction error:', error);
-    res.status(500).json({ 
-      detail: error.message || 'Failed to create prediction'
-    });
-  }
-});
-
+// Get prediction status
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -64,7 +25,33 @@ router.get('/:id', async (req, res) => {
   } catch (error) {
     logger.error('Get prediction error:', error);
     res.status(500).json({ 
-      detail: error.message || 'Failed to get prediction'
+      error: error.message || 'Failed to get prediction'
+    });
+  }
+});
+
+// Create new prediction
+router.post('/', async (req, res) => {
+  try {
+    const { model, input } = req.body;
+    
+    logger.debug('Creating prediction:', { model, input });
+
+    const prediction = await replicate.predictions.create({
+      version: model,
+      input
+    });
+
+    if (!prediction || prediction.error) {
+      throw new Error(prediction?.error || 'Failed to create prediction');
+    }
+
+    logger.debug('Prediction created:', prediction);
+    res.status(201).json(prediction);
+  } catch (error) {
+    logger.error('Create prediction error:', error);
+    res.status(500).json({ 
+      error: error.message || 'Failed to create prediction'
     });
   }
 });
