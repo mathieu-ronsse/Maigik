@@ -3,13 +3,10 @@ import { logger } from '../../utils/logger';
 import { ApiError } from '../../utils/errors/types';
 
 export class ReplicateApiClient {
-  private token: string;
-  
-  constructor(token: string) {
+  constructor(private token: string) {
     if (!token) {
       throw new Error('Replicate API token is required');
     }
-    this.token = token;
   }
 
   private getHeaders(): HeadersInit {
@@ -20,45 +17,54 @@ export class ReplicateApiClient {
   }
 
   private async handleResponse<T>(response: Response): Promise<T> {
+    const contentType = response.headers.get('content-type');
+    
+    if (!contentType?.includes('application/json')) {
+      throw new ApiError('Invalid response format from API', response.status);
+    }
+
+    const data = await response.json();
+    
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
       throw new ApiError(
-        errorData.detail || `API request failed: ${response.status}`,
+        data.detail || `API request failed: ${response.status}`,
         response.status
       );
     }
 
-    return response.json();
+    return data;
   }
 
   async createPrediction<T>(version: string, input: Record<string, unknown>): Promise<T> {
-    logger.debug('Creating prediction:', { version, input });
-    
-    const response = await fetch(`${REPLICATE_API.BASE_URL}${REPLICATE_API.PREDICTIONS}`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({ version, input })
-    });
+    try {
+      logger.debug('Creating prediction:', { version, input });
+      
+      const response = await fetch(`${REPLICATE_API.BASE_URL}${REPLICATE_API.PREDICTIONS}`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ version, input })
+      });
 
-    return this.handleResponse<T>(response);
+      return this.handleResponse<T>(response);
+    } catch (error) {
+      logger.error('Failed to create prediction:', error);
+      throw error;
+    }
   }
 
   async getPrediction<T>(id: string): Promise<T> {
-    const response = await fetch(
-      `${REPLICATE_API.BASE_URL}${REPLICATE_API.getPrediction(id)}`,
-      {
-        headers: this.getHeaders()
-      }
-    );
+    try {
+      const response = await fetch(
+        `${REPLICATE_API.BASE_URL}${REPLICATE_API.getPrediction(id)}`,
+        {
+          headers: this.getHeaders()
+        }
+      );
 
-    return this.handleResponse<T>(response);
+      return this.handleResponse<T>(response);
+    } catch (error) {
+      logger.error('Failed to get prediction:', error);
+      throw error;
+    }
   }
 }
-
-export const createReplicateClient = () => {
-  const token = import.meta.env.VITE_REPLICATE_API_TOKEN;
-  if (!token) {
-    throw new Error('VITE_REPLICATE_API_TOKEN environment variable is not set');
-  }
-  return new ReplicateApiClient(token);
-};
