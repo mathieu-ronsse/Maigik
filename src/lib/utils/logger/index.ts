@@ -8,7 +8,7 @@ interface LogMessage {
 }
 
 class Logger {
-  private isDevelopment = process.env.NODE_ENV === 'development';
+  private isDevelopment = import.meta.env.DEV;
 
   private formatMessage(message: LogMessage): string {
     return `[${message.timestamp}] [${message.level.toUpperCase()}] ${message.message}`;
